@@ -1,124 +1,79 @@
-/*******************************************************************************
- *     Cloud Foundry 
- *     Copyright (c) [2009-2014] Pivotal Software, Inc. All Rights Reserved.
- *
- *     This product is licensed to you under the Apache License, Version 2.0 (the "License").
- *     You may not use this product except in compliance with the License.
- *
- *     This product includes a number of subcomponents with
- *     separate copyright notices and license terms. Your use of these
- *     subcomponents is subject to the terms and conditions of the
- *     subcomponent's license, as noted in the LICENSE file.
- *************************************************************************/
- 
-package com.fidelity.ffio.guide.batchreports.config;
-
+import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.AuthorityUtils;
 import org.springframework.security.oauth2.common.DefaultOAuth2AccessToken;
 import org.springframework.security.oauth2.common.OAuth2AccessToken;
+import org.springframework.security.oauth2.common.OAuth2Request;
 import org.springframework.security.oauth2.provider.OAuth2Authentication;
-import org.springframework.security.oauth2.provider.OAuth2Request;
-import org.springframework.security.oauth2.provider.token.AccessTokenConverter;
-import org.springframework.security.oauth2.provider.token.DefaultUserAuthenticationConverter;
 import org.springframework.security.oauth2.provider.token.UserAuthenticationConverter;
 
 import java.util.*;
 
-/**
- * Default implementation of {@link AccessTokenConverter}.
- * 
- * @author Dave Syer
- * 
- */
-public class FidelityAccessTokenConverter implements AccessTokenConverter {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
-	private UserAuthenticationConverter userTokenConverter = new DefaultUserAuthenticationConverter();
-	
-	/**
-	 * Converter for the part of the data in the token representing a user.
-	 * 
-	 * @param userTokenConverter the userTokenConverter to set
-	 */
-	public void setUserTokenConverter(UserAuthenticationConverter userTokenConverter) {
-		this.userTokenConverter = userTokenConverter;
-	}
+class FidelityAccessTokenConverterTest {
 
-	public Map<String, ?> convertAccessToken(OAuth2AccessToken token, OAuth2Authentication authentication) {
-		Map<String, Object> response = new HashMap<String, Object>();
-		OAuth2Request clientToken = authentication.getOAuth2Request();
+    @Test
+    void testConvertAccessToken() {
+        // Mock dependencies
+        UserAuthenticationConverter userTokenConverter = mock(UserAuthenticationConverter.class);
+        FidelityAccessTokenConverter accessTokenConverter = new FidelityAccessTokenConverter();
+        accessTokenConverter.setUserTokenConverter(userTokenConverter);
 
-		if (!authentication.isClientOnly()) {
-			response.putAll(userTokenConverter.convertUserAuthentication(authentication.getUserAuthentication()));
-		} else {
-			if (clientToken.getAuthorities()!=null && !clientToken.getAuthorities().isEmpty()) {
-				response.put(UserAuthenticationConverter.AUTHORITIES,
-							 AuthorityUtils.authorityListToSet(clientToken.getAuthorities()));
-			}
-		}
+        // Mock OAuth2AccessToken and OAuth2Authentication
+        OAuth2AccessToken token = mock(DefaultOAuth2AccessToken.class);
+        OAuth2Authentication authentication = mock(OAuth2Authentication.class);
+        when(authentication.isClientOnly()).thenReturn(false);
 
-		if (token.getScope()!=null) {
-			response.put(SCOPE, token.getScope());
-		}
-		if (token.getAdditionalInformation().containsKey(JTI)) {
-			response.put(JTI, token.getAdditionalInformation().get(JTI));
-		}
+        // Mock userTokenConverter behavior
+        when(userTokenConverter.convertUserAuthentication(Mockito.any())).thenReturn(Collections.singletonMap("key", "value"));
 
-		if (token.getExpiration() != null) {
-			response.put(EXP, token.getExpiration().getTime() / 1000);
-		}
+        // Call the method
+        Map<String, ?> result = accessTokenConverter.convertAccessToken(token, authentication);
 
-		response.putAll(token.getAdditionalInformation());
+        // Verify the result
+        assertEquals("value", result.get("key"));
+    }
 
-		response.put(CLIENT_ID, clientToken.getClientId());
-		if (clientToken.getResourceIds() != null && !clientToken.getResourceIds().isEmpty()) {
-			response.put(AUD, clientToken.getResourceIds());
-		}
-		return response;
-	}
+    @Test
+    void testExtractAccessToken() {
+        // Create a sample map for testing
+        Map<String, Object> map = new HashMap<>();
+        map.put("key1", "value1");
+        map.put("key2", "value2");
 
-	public OAuth2AccessToken extractAccessToken(String value, Map<String, ?> map) {
-		DefaultOAuth2AccessToken token = new DefaultOAuth2AccessToken(value);
-		Map<String, Object> info = new HashMap<String, Object>(map);
-		info.remove(EXP);
-		info.remove(AUD);
-		info.remove(CLIENT_ID);
-		info.remove(SCOPE);
-		if (map.containsKey(EXP)) {
-			token.setExpiration(new Date((Long) map.get(EXP) * 1000L));
-		}
-		if (map.containsKey(JTI)) {
-			info.put(JTI, map.get(JTI));
-		}
-		@SuppressWarnings("unchecked")
-		Collection<String> scope = (Collection<String>) map.get(SCOPE);
-		if (scope != null) {
-			token.setScope(new HashSet<String>(scope));
-		}
-		token.setAdditionalInformation(info);
-		return token;
-	}
+        // Mock OAuth2AccessToken
+        FidelityAccessTokenConverter accessTokenConverter = new FidelityAccessTokenConverter();
+        OAuth2AccessToken result = accessTokenConverter.extractAccessToken("tokenValue", map);
 
-	public OAuth2Authentication extractAuthentication(Map<String, ?> map) {
-		Map<String, String> parameters = new HashMap<String, String>();
-		@SuppressWarnings("unchecked")
-		ArrayList scopeList = new ArrayList();
-		scopeList.add(map.containsKey(SCOPE) ? map.get(SCOPE)
-				: "");
-		Set<String> scope = new LinkedHashSet<String>(scopeList);
-		String clientId = (String) map.get(CLIENT_ID);
-		parameters.put(CLIENT_ID, clientId);
-		@SuppressWarnings("unchecked")
-		Set<String> resourceIds = new LinkedHashSet<String>(map.containsKey(AUD) ? (Collection<String>) map.get(AUD)
-				: Collections.<String>emptySet());
-		OAuth2Request request = new OAuth2Request(parameters, clientId, null, true, scope, resourceIds, null, null,
-				null);
-		Authentication user = userTokenConverter.extractAuthentication(map);
+        // Verify the result
+        assertEquals("tokenValue", result.getValue());
+        assertEquals("value1", result.getAdditionalInformation().get("key1"));
+        assertEquals("value2", result.getAdditionalInformation().get("key2"));
+    }
 
-		return new OAuth2Authentication(request, user);
-	}
-	
+    @Test
+    void testExtractAuthentication() {
+        // Create a sample map for testing
+        Map<String, Object> map = new HashMap<>();
+        map.put("key1", "value1");
+        map.put("key2", "value2");
 
+        // Mock dependencies
+        UserAuthenticationConverter userTokenConverter = mock(UserAuthenticationConverter.class);
+        when(userTokenConverter.extractAuthentication(map)).thenReturn(mock(Authentication.class));
 
+        FidelityAccessTokenConverter accessTokenConverter = new FidelityAccessTokenConverter();
+        accessTokenConverter.setUserTokenConverter(userTokenConverter);
 
-       }
+        // Call the method
+        OAuth2Authentication result = accessTokenConverter.extractAuthentication(map);
+
+        // Verify the result
+        assertEquals("value1", result.getOAuth2Request().getRequestParameters().get("key1"));
+        assertEquals("value2", result.getOAuth2Request().getRequestParameters().get("key2"));
+    }
+}
