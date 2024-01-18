@@ -1,426 +1,124 @@
-  @Before
-    public void setUp() {
-        mockMessagesList = Arrays.asList("Message1", "Message2", "Message3");
-        mockReportInfo = new ReportInfo("outputReport.txt");
-    }
+/*******************************************************************************
+ *     Cloud Foundry 
+ *     Copyright (c) [2009-2014] Pivotal Software, Inc. All Rights Reserved.
+ *
+ *     This product is licensed to you under the Apache License, Version 2.0 (the "License").
+ *     You may not use this product except in compliance with the License.
+ *
+ *     This product includes a number of subcomponents with
+ *     separate copyright notices and license terms. Your use of these
+ *     subcomponents is subject to the terms and conditions of the
+ *     subcomponent's license, as noted in the LICENSE file.
+ *************************************************************************/
+ 
+package com.fidelity.ffio.guide.batchreports.config;
 
-    @Test
-    public void testDeterminePeriodEndDate() {
-        List<String> paramList = Arrays.asList("01/15/2024");
-        String result = autofeeCollectionReport.determinePeriodEndDate(paramList);
-        assertEquals("2024/01/15", result);
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.AuthorityUtils;
+import org.springframework.security.oauth2.common.DefaultOAuth2AccessToken;
+import org.springframework.security.oauth2.common.OAuth2AccessToken;
+import org.springframework.security.oauth2.provider.OAuth2Authentication;
+import org.springframework.security.oauth2.provider.OAuth2Request;
+import org.springframework.security.oauth2.provider.token.AccessTokenConverter;
+import org.springframework.security.oauth2.provider.token.DefaultUserAuthenticationConverter;
+import org.springframework.security.oauth2.provider.token.UserAuthenticationConverter;
 
-        // Test with empty parameter
-        paramList = new ArrayList<>();
-        result = autofeeCollectionReport.determinePeriodEndDate(paramList);
-        assertEquals(autofeeCollectionReport.getPeriodEndDateInfo(), result);
-    }
+import java.util.*;
 
-    @Test
-    public void testBuildAndPrintReport() throws IOException {
-        // Mock the dependencies
-        Logger mockLogger = mock(Logger.class);
-        when(mockLogger.isInfoEnabled()).thenReturn(true);
-        when(mockLogger.isErrorEnabled()).thenReturn(true);
-        when(mockLogger.isDebugEnabled()).thenReturn(true);
+/**
+ * Default implementation of {@link AccessTokenConverter}.
+ * 
+ * @author Dave Syer
+ * 
+ */
+public class FidelityAccessTokenConverter implements AccessTokenConverter {
 
-        doNothing().when(mockLogger).info(anyString());
-        doNothing().when(mockLogger).error(anyString(), any(Exception.class));
-
-        when(autofeeCollectionReport.buildheaderMap(anyList(), anyString(), any(), anyString())).thenReturn(new ArrayList<>());
-        when(autofeeCollectionReport.buildBodyMap(anyList(), anyList(), any())).thenReturn(new ArrayList<>());
-
-        // Set the mock logger
-        ReflectionTestUtils.setField(autofeeCollectionReport, "LOG", mockLogger);
-
-        autofeeCollectionReport.buildAndPrintReport(mockMessagesList, mockReportInfo, "2024/01/15");
-
-        // Add assertions based on the behavior you expect
-        // For example, verify that the mockLogger.info method was called
-        verify(mockLogger, times(1)).info(contains("AutoFee::called buildAndPrintReport messageList size is:::"));
-    }
-
-    @Test
-    public void testBuildHeaderMap() throws IOException {
-        List<String> fileContentsList = new ArrayList<>();
-        String pageNumber = "1";
-        String periodEndDate = "2024/01/15";
-        when(autofeeCollectionReport.processTemplate(anyList(), anyMap(), any(), anyString())).thenReturn(new ArrayList<>());
-
-        autofeeCollectionReport.buildheaderMap(fileContentsList, pageNumber, mockReportInfo, periodEndDate);
-
-        // Add assertions based on the behavior you expect
-    }
-
-    @Test
-    public void testBuildBodyMap() throws IOException {
-        List<String> fileContentsList = new ArrayList<>();
-        List<String> messageContentList = Arrays.asList("Content1", "Content2", "Content3");
-        when(autofeeCollectionReport.processTemplate(anyList(), anyMap(), any(), anyString())).thenReturn(new ArrayList<>());
-
-        autofeeCollectionReport.buildBodyMap(fileContentsList, messageContentList, mockReportInfo);
-
-        // Add assertions based on the behavior you expect
-    }
-
-    @Test
-    public void testProcessTemplate() throws IOException {
-        List<String> fileContentsList = new ArrayList<>();
-        Map<String, Object> valuesMap = new HashMap<>();
-        String templateFileName = "templates/autofeeCollection-header.txt";
-
-        autofeeCollectionReport.processTemplate(fileContentsList, valuesMap, mockReportInfo, templateFileName);
-
-        // Add assertions based on the behavior you expect
-    }
-
-    @Test
-    public void testPrintReport() throws IOException {
-        List<String> fileContentsList = Arrays.asList("Line1", "Line2", "Line3");
-        when(mockReportInfo.getOutputReportFileName()).thenReturn("outputReport.txt");
-
-        autofeeCollectionReport.printReport(fileContentsList, mockReportInfo);
-
-        // Add assertions based on the behavior you expect
-        Path path = Paths.get("outputReport.txt");
-        assertTrue(Files.exists(path));
-
-        // Clean up: Delete the created file after the test
-        Files.delete(path);
-    }
+	private UserAuthenticationConverter userTokenConverter = new DefaultUserAuthenticationConverter();
 	
-	 @Test
-    public void testCalPlanWrapId() {
-        GicsMoveFeesInfo gicsMovefeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> wrapProviderInfoList = new ArrayList<>();
-        wrapProviderInfoList.add(Map.of("wrap_plan_id_nbr", 1, "plan_wrap_id_nbr", 100));
-        Mockito.when(autofeeCollectionMapper.someMethod()).thenReturn(/* some value */);
+	/**
+	 * Converter for the part of the data in the token representing a user.
+	 * 
+	 * @param userTokenConverter the userTokenConverter to set
+	 */
+	public void setUserTokenConverter(UserAuthenticationConverter userTokenConverter) {
+		this.userTokenConverter = userTokenConverter;
+	}
 
-        int result = autofeeCollectionReport.calPlanWrapId(0, gicsMovefeesInfo, wrapProviderInfoList);
+	public Map<String, ?> convertAccessToken(OAuth2AccessToken token, OAuth2Authentication authentication) {
+		Map<String, Object> response = new HashMap<String, Object>();
+		OAuth2Request clientToken = authentication.getOAuth2Request();
 
-        assertEquals(0, result); // Add the expected result based on your logic
-    }
+		if (!authentication.isClientOnly()) {
+			response.putAll(userTokenConverter.convertUserAuthentication(authentication.getUserAuthentication()));
+		} else {
+			if (clientToken.getAuthorities()!=null && !clientToken.getAuthorities().isEmpty()) {
+				response.put(UserAuthenticationConverter.AUTHORITIES,
+							 AuthorityUtils.authorityListToSet(clientToken.getAuthorities()));
+			}
+		}
 
-     @Test
-    public void testCalMinStartDate() {
-        // Prepare test data
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> minStartDateList = new ArrayList<>();
-        minStartDateList.add(Collections.singletonMap("plan_id_nbr", 789));
+		if (token.getScope()!=null) {
+			response.put(SCOPE, token.getScope());
+		}
+		if (token.getAdditionalInformation().containsKey(JTI)) {
+			response.put(JTI, token.getAdditionalInformation().get(JTI));
+		}
 
-        // Mock behavior
-        when(autofeeCollectionMapper.getMinStartDateList()).thenReturn(minStartDateList);
+		if (token.getExpiration() != null) {
+			response.put(EXP, token.getExpiration().getTime() / 1000);
+		}
 
-        // Call the method
-        String result = autofeeCollectionReport.calMinStartDate("", gicsMoveFeesInfo, minStartDateList);
+		response.putAll(token.getAdditionalInformation());
 
-        // Assert the result
-        assertEquals("", result);
-    }
+		response.put(CLIENT_ID, clientToken.getClientId());
+		if (clientToken.getResourceIds() != null && !clientToken.getResourceIds().isEmpty()) {
+			response.put(AUD, clientToken.getResourceIds());
+		}
+		return response;
+	}
 
-    @Test
-    public void testCalDateDiffInfo() {
-        // Prepare test data
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> minStartDateList = new ArrayList<>();
-        minStartDateList.add(Collections.singletonMap("plan_id_nbr", 999));
+	public OAuth2AccessToken extractAccessToken(String value, Map<String, ?> map) {
+		DefaultOAuth2AccessToken token = new DefaultOAuth2AccessToken(value);
+		Map<String, Object> info = new HashMap<String, Object>(map);
+		info.remove(EXP);
+		info.remove(AUD);
+		info.remove(CLIENT_ID);
+		info.remove(SCOPE);
+		if (map.containsKey(EXP)) {
+			token.setExpiration(new Date((Long) map.get(EXP) * 1000L));
+		}
+		if (map.containsKey(JTI)) {
+			info.put(JTI, map.get(JTI));
+		}
+		@SuppressWarnings("unchecked")
+		Collection<String> scope = (Collection<String>) map.get(SCOPE);
+		if (scope != null) {
+			token.setScope(new HashSet<String>(scope));
+		}
+		token.setAdditionalInformation(info);
+		return token;
+	}
 
-        // Mock behavior
-        when(autofeeCollectionMapper.getMinStartDateList()).thenReturn(minStartDateList);
+	public OAuth2Authentication extractAuthentication(Map<String, ?> map) {
+		Map<String, String> parameters = new HashMap<String, String>();
+		@SuppressWarnings("unchecked")
+		ArrayList scopeList = new ArrayList();
+		scopeList.add(map.containsKey(SCOPE) ? map.get(SCOPE)
+				: "");
+		Set<String> scope = new LinkedHashSet<String>(scopeList);
+		String clientId = (String) map.get(CLIENT_ID);
+		parameters.put(CLIENT_ID, clientId);
+		@SuppressWarnings("unchecked")
+		Set<String> resourceIds = new LinkedHashSet<String>(map.containsKey(AUD) ? (Collection<String>) map.get(AUD)
+				: Collections.<String>emptySet());
+		OAuth2Request request = new OAuth2Request(parameters, clientId, null, true, scope, resourceIds, null, null,
+				null);
+		Authentication user = userTokenConverter.extractAuthentication(map);
 
-        // Call the method
-        int result = autofeeCollectionReport.calDateDiffInfo(0, "2022-01-01", "2022-01-31", gicsMoveFeesInfo, minStartDateList);
-
-        // Assert the result
-        assertEquals(30, result);
-    }
-
-    // Add similar tests for other methods...
-
-  @Test
-    public void testCalPlanWrapId() {
-        // Prepare test data
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> wrapProviderInfoList = new ArrayList<>();
-        wrapProviderInfoList.add(Collections.singletonMap("wrap_plan_id_nbr", 123));
-
-        // Mock behavior
-        when(autofeeCollectionMapper.getWrapProviderInfoList()).thenReturn(wrapProviderInfoList);
-
-        // Call the method
-        int result = autofeeCollectionReport.calPlanWrapId(0, gicsMoveFeesInfo, wrapProviderInfoList);
-
-        // Assert the result
-        assertEquals(123, result);
-    }
-
-    // Similar tests for other methods...
-
-    @Test
-    public void testCalPendFeeRedemA() {
-        // Prepare test data
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> pendFeeRedemAInfoList = new ArrayList<>();
-        pendFeeRedemAInfoList.add(Collections.singletonMap("plan_id_nbr", 456));
-
-        // Mock behavior
-        when(autofeeCollectionMapper.getPendFeeRedemAInfoList()).thenReturn(pendFeeRedemAInfoList);
-
-        // Call the method
-        BigDecimal result = autofeeCollectionReport.calPendFeeRedemA(BigDecimal.ZERO, pendFeeRedemAInfoList, gicsMoveFeesInfo);
-
-        // Assert the result
-        assertEquals(BigDecimal.ZERO, result);
-    }
-    @Test
-    public void testCalCurStifBalA() {
-        // Prepare test data
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> curStifBalanceInfoList = new ArrayList<>();
-        curStifBalanceInfoList.add(Collections.singletonMap("plan_id_nbr", 555));
-
-        // Mock behavior
-        when(autofeeCollectionMapper.getCurStifBalanceInfoList()).thenReturn(curStifBalanceInfoList);
-
-        // Call the method
-        BigDecimal result = autofeeCollectionReport.calCurStifBalA(BigDecimal.ZERO, gicsMoveFeesInfo, curStifBalanceInfoList);
-
-        // Assert the result
-        assertEquals(BigDecimal.ZERO, result);
-    }
-
-    // Add similar tests for other methods...
-
-    @Test
-    public void testCalPendRegRedemA() {
-        // Prepare test data
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> pendRegRedemAInfoList = new ArrayList<>();
-        pendRegRedemAInfoList.add(Collections.singletonMap("plan_id_nbr", 777));
-
-        // Mock behavior
-        when(autofeeCollectionMapper.getPendRegRedemAInfoList()).thenReturn(pendRegRedemAInfoList);
-
-        // Call the method
-        BigDecimal result = autofeeCollectionReport.calPendRegRedemA(BigDecimal.ZERO, pendRegRedemAInfoList, gicsMoveFeesInfo);
-
-        // Assert the result
-        assertEquals(BigDecimal.ZERO, result);
-    }
-
-    // Add similar tests for other methods...
-
-    @Test
-    public void testCalPendFeeRedemA() {
-        // Prepare test data
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        List<Map<String, Object>> pendFeeRedemAInfoList = new ArrayList<>();
-        pendFeeRedemAInfoList.add(Collections.singletonMap("plan_id_nbr", 888));
-
-        // Mock behavior
-        when(autofeeCollectionMapper.getPendFeeRedemAInfoList()).thenReturn(pendFeeRedemAInfoList);
-
-        // Call the method
-        BigDecimal result = autofeeCollectionReport.calPendFeeRedemA(BigDecimal.ZERO, pendFeeRedemAInfoList, gicsMoveFeesInfo);
-
-        // Assert the result
-        assertEquals(BigDecimal.ZERO, result);
-    }
+		return new OAuth2Authentication(request, user);
+	}
 	
-	 @Test
-    void testFprsPlanParam() {
-        // Test when fprsPlanParam is not NULL
-        String result = autofeeCollectionReport.fprsPlanParam("test");
-        assertEquals("test", result);
 
-        // Test when fprsPlanParam is NULL
-        result = autofeeCollectionReport.fprsPlanParam(null);
-        assertEquals("", result);
-    }
 
-    // Add similar tests for other methods
 
-    // Example test for executeGetFeeAcru method
-    @Test
-    void testExecuteGetFeeAcru() {
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        // Mocking getFeeAcruInfo method
-        when(autofeeCollectionMapper.getFeeAcruInfo(anyInt(), anyString(), anyString()))
-                .thenReturn(List.of(Map.of("plan_id_nbr", 1, "fee_cat_id_nbr", 2, "fee_recp_id_nbr", 3, "fee_strt_date", "2022-01-01")));
-
-        BigDecimal result = autofeeCollectionReport.executeGetFeeAcru(1, "Y", gicsMoveFeesInfo, "2022-01-01", "2022", BigDecimal.ZERO, 1, "2022-01-01", BigDecimal.ZERO);
-
-        assertEquals(BigDecimal.ZERO, result); // Add your expected value
-        // Verify that getFeeAcruInfo method was called with the expected parameters
-        verify(autofeeCollectionMapper, times(1)).getFeeAcruInfo(anyInt(), anyString(), anyString());
-    }
-
-    // Add similar tests for other methods
-
-    // Example test for updateTables method
-    @Test
-    void testUpdateTables() throws SQLException, ApplicationException {
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        gicsMoveFeesInfo.setFprsPlanC("testPlan");
-        gicsMoveFeesInfo.setPlanLongNm("Test Plan");
-        when(autofeeCollectionMapper.updateTablesInfo(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
-                anyString(), anyString(), any(BigDecimal.class), anyString())).thenReturn(1);
-
-        assertDoesNotThrow(() -> {
-            autofeeCollectionReport.updateTables(gicsMoveFeesInfo, 1, 2, "2022-01-01", "2022-01-01", 1, BigDecimal.ZERO, 1, "2022-01-01");
-        });
-
-        // Verify that updateTablesInfo method was called with the expected parameters
-        verify(autofeeCollectionMapper, times(1)).updateTablesInfo(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
-                anyString(), anyString(), any(BigDecimal.class), anyString());
-    }
-	
-	 @Test
-    void testFprsPlanParam() {
-        // Test when fprsPlanParam is not NULL
-        String result = autofeeCollectionReport.fprsPlanParam("test");
-        assertEquals("test", result);
-
-        // Test when fprsPlanParam is NULL
-        result = autofeeCollectionReport.fprsPlanParam(null);
-        assertEquals("", result);
-    }
-
-    @Test
-    void testExecuteGetFeeAcru() {
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        // Mocking getFeeAcruInfo method
-        when(autofeeCollectionMapper.getFeeAcruInfo(anyInt(), anyString(), anyString()))
-                .thenReturn(List.of(Map.of("plan_id_nbr", 1, "fee_cat_id_nbr", 2, "fee_recp_id_nbr", 3, "fee_strt_date", "2022-01-01")));
-
-        BigDecimal result = autofeeCollectionReport.executeGetFeeAcru(1, "Y", gicsMoveFeesInfo, "2022-01-01", "2022", BigDecimal.ZERO, 1, "2022-01-01", BigDecimal.ZERO);
-
-        assertEquals(BigDecimal.ZERO, result); // Add your expected value
-        // Verify that getFeeAcruInfo method was called with the expected parameters
-        verify(autofeeCollectionMapper, times(1)).getFeeAcruInfo(anyInt(), anyString(), anyString());
-    }
-
-    @Test
-    void testExecuteGetFeeDetailTotal() {
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        // Mocking getFeeDetailTotalInfo method
-        when(autofeeCollectionMapper.getFeeDetailTotalInfo(anyInt(), anyInt(), anyInt(), anyString(), anyString()))
-                .thenReturn(List.of(Map.of("fee_acru_a", 100.0)));
-
-        BigDecimal result = autofeeCollectionReport.executeGetFeeDetailTotal(gicsMoveFeesInfo, 1, 2, "2022-01-01", "2022-01-31", BigDecimal.ZERO, BigDecimal.ZERO);
-
-        assertEquals(BigDecimal.valueOf(100.0), result); // Add your expected value
-        // Verify that getFeeDetailTotalInfo method was called with the expected parameters
-        verify(autofeeCollectionMapper, times(1)).getFeeDetailTotalInfo(anyInt(), anyInt(), anyInt(), anyString(), anyString());
-    }
-
-    @Test
-    void testExecuteGetFeeDetail() {
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        // Mocking getFeeDetailTotalInfo method
-        when(autofeeCollectionMapper.getFeeDetailTotalInfo(anyInt(), anyInt(), anyInt(), anyString(), anyString()))
-                .thenReturn(List.of(Map.of("fee_acru_a", 100.0)));
-
-        BigDecimal result = autofeeCollectionReport.executeGetFeeDetail(1, gicsMoveFeesInfo, 2, 3, "2022-01-01", "2022-01-31", BigDecimal.ZERO, BigDecimal.ZERO, 4, "2022-01-01");
-
-        assertEquals(BigDecimal.valueOf(100.0), result); // Add your expected value
-        // Verify that getFeeDetailTotalInfo method was called with the expected parameters
-        verify(autofeeCollectionMapper, times(1)).getFeeDetailTotalInfo(anyInt(), anyInt(), anyInt(), anyString(), anyString());
-        // Add additional verification for updateTables method
-        verify(autofeeCollectionMapper, times(1)).updateTablesInfo(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
-                anyString(), anyString(), any(BigDecimal.class), anyString());
-    }
-
-    @Test
-    void testUpdateTables() throws SQLException, ApplicationException {
-        GicsMoveFeesInfo gicsMoveFeesInfo = new GicsMoveFeesInfo();
-        gicsMoveFeesInfo.setFprsPlanC("testPlan");
-        gicsMoveFeesInfo.setPlanLongNm("Test Plan");
-        when(autofeeCollectionMapper.updateTablesInfo(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
-                anyString(), anyString(), any(BigDecimal.class), anyString())).thenReturn(1);
-
-        assertDoesNotThrow(() -> {
-            autofeeCollectionReport.updateTables(gicsMoveFeesInfo, 1, 2, "2022-01-01", "2022-01-01", 1, BigDecimal.ZERO, 1, "2022-01-01");
-        });
-
-        // Verify that updateTablesInfo method was called with the expected parameters
-        verify(autofeeCollectionMapper, times(1)).updateTablesInfo(anyInt(), anyInt(), anyInt(), anyInt(), anyInt(),
-                anyString(), anyString(), any(BigDecimal.class), anyString());
-    }
-
-    @Test
-    void testMapGicsMoveFeeToModel() {
-        // Mocking data from the database
-        List<Map<String, Object>> gicsMoveFeesListFrmDB = List.of(
-                Map.of("fprs_plan_c", "testPlan", "gl_acc_prst_nbr", 1, "plan_id_nbr", 2, "plan_long_nm", "Test Plan"));
-
-        List<GicsMoveFeesInfo> result = autofeeCollectionReport.mapGicsMoveFeeToModel(gicsMoveFeesListFrmDB);
-
-        assertEquals(1, result.size()); // Add your expected value
-        // Add more assertions based on the data you expect
-        assertEquals("testPlan", result.get(0).getFprsPlanC());
-        assertEquals(1, result.get(0).getGlAccPrstNbr());
-        assertEquals(2, result.get(0).getPlanIdNbr());
-        assertEquals("Test Plan", result.get(0).getPlanLongNm());
-    }
-	
-	  @BeforeEach
-    void setUp() {
-        MockitoAnnotations.initMocks(this);
-    }
-
-    @Test
-    void testDeterminePeriodEndDate() {
-        List<String> paramList = Arrays.asList("01/15/2024");
-        String result = autofeeCollectionReport.determinePeriodEndDate(paramList);
-        assertEquals("2024/01/15", result);
-
-        // Test for empty paramList
-        paramList = Arrays.asList();
-        result = autofeeCollectionReport.determinePeriodEndDate(paramList);
-        assertEquals(autofeeCollectionReport.getPeriodEndDateInfo(), result);
-
-        // Test for NULL in paramList
-        paramList = Arrays.asList("NULL");
-        result = autofeeCollectionReport.determinePeriodEndDate(paramList);
-        assertEquals(autofeeCollectionReport.getPeriodEndDateInfo(), result);
-    }
-
-    @Test
-    void testPlanFreqFeeParam() {
-        // Test for a specific month
-        String periodEndDate = "2024/01/15";
-        Integer result = autofeeCollectionReport.planFreqFeeParam(periodEndDate);
-        assertEquals(Integer.valueOf("12"), result);
-
-        // Test for a different month
-        periodEndDate = "2024/03/15";
-        result = autofeeCollectionReport.planFreqFeeParam(periodEndDate);
-        assertEquals(Integer.valueOf("12,4"), result);
-
-        // Add more tests for other scenarios
-    }
-
-    @Test
-    void testExecute() {
-        // Mock necessary dependencies
-        when(autofeeCollectionMapper.getGicsMoveFeesInfo(anyInt(), anyString())).thenReturn(someList);
-        // Mock other method calls as needed
-
-        // Create a ReportInfo instance with required parameters
-        ReportInfo reportInfo = new ReportInfo();
-        reportInfo.setParamList(Arrays.asList("01/15/2024", "someValue"));
-
-        // Perform the test
-        ReportStatus result = autofeeCollectionReport.execute(reportInfo);
-
-        // Verify the expected behavior, for example:
-        assertEquals(ReportStatus.SUCCESS, result.getStatus());
-        // Add more verification as needed
-
-        // Verify that specific methods were called with the expected parameters
-        verify(autofeeCollectionMapper).getGicsMoveFeesInfo(anyInt(), anyString());
-        // Verify other method calls as needed
-    }
-
-    //
+       }
